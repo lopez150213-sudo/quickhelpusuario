@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUICK HELP - Acceso Ciudadano</title>
+    <!-- Favicon de la pestaña del navegador -->
+    <link rel="icon" type="image/png" href="image.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+        <div class="text-center mb-6">
+            <img src="image.png" alt="QUICK HELP" class="h-28 mx-auto mb-2 rounded-xl object-contain shadow-md">
+            <h1 class="text-xl font-bold">Portal Ciudadano</h1>
+            <p class="text-xs text-slate-400 mt-1">Registra e informa emergencias en tu comunidad</p>
+        </div>
+
+        <!-- Pestañas Login / Registro -->
+        <div class="flex border-b border-slate-700 mb-5">
+            <button id="tab-login" onclick="mostrarForm('login')" class="flex-1 py-2 text-sm font-semibold border-b-2 border-red-500 text-red-400">Iniciar Sesión</button>
+            <button id="tab-registro" onclick="mostrarForm('registro')" class="flex-1 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">Registrarse</button>
+        </div>
+
+        <!-- Formulario de Iniciar Sesión -->
+        <form id="form-login" onsubmit="iniciarSesion(event)" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico</label>
+                <input type="email" id="login-correo" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña</label>
+                <input type="password" id="login-password" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500">
+            </div>
+            <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow transition text-sm">Ingresar</button>
+        </form>
+
+        <!-- Formulario de Registro -->
+        <form id="form-registro" onsubmit="registrarUsuario(event)" class="space-y-3 hidden">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
+                <input type="text" id="reg-nombre" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500" placeholder="Ej. Juan Pérez">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Teléfono / WhatsApp</label>
+                <input type="tel" id="reg-telefono" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500" placeholder="Ej. 88888888">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico</label>
+                <input type="email" id="reg-correo" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Dirección / Barrio de Residencia</label>
+                <input type="text" id="reg-direccion" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500" placeholder="Ej. Barrio El Centenario">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña</label>
+                <input type="password" id="reg-password" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500">
+            </div>
+            <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg shadow transition text-sm">Crear Cuenta</button>
+        </form>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://pumnoszmbvcewozejrzm.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_vx6B5RPShC2PiWx5HzlFZw_d11C4H6Q';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function mostrarForm(tipo) {
+            if (tipo === 'login') {
+                document.getElementById('form-login').classList.remove('hidden');
+                document.getElementById('form-registro').classList.add('hidden');
+                document.getElementById('tab-login').className = "flex-1 py-2 text-sm font-semibold border-b-2 border-red-500 text-red-400";
+                document.getElementById('tab-registro').className = "flex-1 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200";
+            } else {
+                document.getElementById('form-login').classList.add('hidden');
+                document.getElementById('form-registro').classList.remove('hidden');
+                document.getElementById('tab-registro').className = "flex-1 py-2 text-sm font-semibold border-b-2 border-red-500 text-red-400";
+                document.getElementById('tab-login').className = "flex-1 py-2 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200";
+            }
+        }
+
+        async function registrarUsuario(e) {
+            e.preventDefault();
+            const nuevoUsuario = {
+                nombre: document.getElementById('reg-nombre').value,
+                telefono: document.getElementById('reg-telefono').value,
+                correo: document.getElementById('reg-correo').value,
+                direccion: document.getElementById('reg-direccion').value,
+                password: document.getElementById('reg-password').value
+            };
+
+            const { data, error } = await supabaseClient
+                .from('usuarios')
+                .insert([nuevoUsuario])
+                .select();
+
+            if (error) {
+                alert('Error al registrar: ' + error.message);
+                return;
+            }
+
+            localStorage.setItem('quickhelp_usuario', JSON.stringify(data[0]));
+            window.location.href = 'reporte.html';
+        }
+
+        async function iniciarSesion(e) {
+            e.preventDefault();
+            const correo = document.getElementById('login-correo').value;
+            const password = document.getElementById('login-password').value;
+
+            const { data: usuarios, error } = await supabaseClient
+                .from('usuarios')
+                .select('*')
+                .eq('correo', correo)
+                .eq('password', password);
+
+            if (error || !usuarios || usuarios.length === 0) {
+                alert('Correo o contraseña incorrectos.');
+                return;
+            }
+
+            localStorage.setItem('quickhelp_usuario', JSON.stringify(usuarios[0]));
+            window.location.href = 'reporte.html';
+        }
+    </script>
+</body>
+</html>

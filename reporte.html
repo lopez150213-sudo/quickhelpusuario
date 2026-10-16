@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUICK HELP - Reportar Emergencia</title>
+    <!-- Favicon de la pestaña del navegador -->
+    <link rel="icon" type="image/png" href="image.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen p-4 flex flex-col items-center">
+
+    <div class="w-full max-w-md bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-2xl mb-6">
+        <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
+            <div class="flex items-center space-x-3">
+                <img src="image.png" alt="QUICK HELP" class="h-10 w-10 object-contain rounded-lg">
+                <div>
+                    <h1 class="text-base font-bold text-red-400">🚨 Reportar Incidencia</h1>
+                    <p id="user-info" class="text-xs text-slate-400">Cargando datos del usuario...</p>
+                </div>
+            </div>
+            <button onclick="cerrarSesion()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded transition text-slate-300">Salir</button>
+        </div>
+
+        <form id="form-reporte-usuario" onsubmit="enviarIncidencia(event)" class="space-y-3 text-xs">
+            <div>
+                <label class="block font-semibold text-slate-300 mb-1">Título de la Emergencia</label>
+                <input type="text" id="titulo" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-red-500" placeholder="Ej. Hombre cayó en un arroyo">
+            </div>
+
+            <div>
+                <label class="block font-semibold text-slate-300 mb-1">Descripción detallada</label>
+                <textarea id="descripcion" rows="2" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-red-500" placeholder="Ej. Persona en estado de ebriedad se cayó al cauce, necesita asistencia urgente"></textarea>
+            </div>
+
+            <div>
+                <label class="block font-semibold text-slate-300 mb-1">Ubicación Actual (GPS)</label>
+                <div id="map-preview" class="w-full h-36 rounded-lg border border-slate-700 mb-2"></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="number" step="any" id="latitud" required readonly class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-400 text-center">
+                    <input type="number" step="any" id="longitud" required readonly class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-400 text-center">
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-semibold text-slate-300 mb-1">Dirección / Punto de Referencia</label>
+                <input type="text" id="direccion_referencia" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-red-500">
+            </div>
+
+            <div class="pt-2">
+                <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-lg transition text-sm flex items-center justify-center space-x-2">
+                    <span>🚨 ENVIAR ALERTA URGENTE</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- SECCIÓN: Mis Reportes Enviados -->
+    <div class="w-full max-w-md bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-2xl mb-6">
+        <h2 class="text-sm font-bold text-slate-200 mb-3 flex items-center justify-between">
+            <span>📋 Mis Reportes Enviados</span>
+            <span id="contador-mis-reportes" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded-full text-slate-300">0</span>
+        </h2>
+        <div id="mis-reportes-list" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+            <p class="text-xs text-slate-500 text-center py-3">Cargando tus reportes...</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SUPABASE_URL = 'https://pumnoszmbvcewozejrzm.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_vx6B5RPShC2PiWx5HzlFZw_d11C4H6Q';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const usuarioActual = JSON.parse(localStorage.getItem('quickhelp_usuario'));
+
+        if (!usuarioActual) {
+            window.location.href = 'login.html';
+        } else {
+            document.getElementById('user-info').textContent = 'Hola, ' + usuarioActual.nombre;
+            document.getElementById('direccion_referencia').value = usuarioActual.direccion || '';
+        }
+
+        const map = L.map('map-preview').setView([11.9344, -85.9560], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+        let userMarker = null;
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                document.getElementById('latitud').value = lat.toFixed(6);
+                document.getElementById('longitud').value = lng.toFixed(6);
+
+                map.setView([lat, lng], 16);
+                userMarker = L.marker([lat, lng]).addTo(map);
+            }, () => {
+                document.getElementById('latitud').value = 11.9344;
+                document.getElementById('longitud').value = -85.9560;
+            });
+        }
+
+        async function cargarMisReportes() {
+            const container = document.getElementById('mis-reportes-list');
+            
+            const { data: reportes, error } = await supabaseClient
+                .from('incidentes')
+                .select('*')
+                .eq('reportado_por', usuarioActual.nombre)
+                .order('id', { ascending: false });
+
+            if (error) {
+                container.innerHTML = '<p class="text-xs text-red-400 text-center py-2">Error al cargar historial.</p>';
+                return;
+            }
+
+            document.getElementById('contador-mis-reportes').textContent = reportes.length;
+
+            if (reportes.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">No has enviado reportes aún.</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            reportes.forEach(rep => {
+                let badgeEstado = '';
+                let botonEliminar = '';
+
+                if (rep.estado === 'pendiente') {
+                    badgeEstado = '<span class="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-semibold">⏳ En Proceso</span>';
+                } else {
+                    badgeEstado = '<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-semibold">✅ Atendido</span>';
+                    botonEliminar = '<button onclick="eliminarReporte(\'' + rep.id + '\')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded text-[10px] font-semibold transition">Eliminar del historial</button>';
+                }
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-900 border border-slate-700 p-2.5 rounded-xl space-y-2";
+                card.innerHTML = 
+                    '<div class="flex justify-between items-start">' +
+                        '<h3 class="font-bold text-slate-200 text-xs">' + rep.titulo + '</h3>' +
+                        badgeEstado +
+                    '</div>' +
+                    '<p class="text-[11px] text-slate-400">' + (rep.descripcion || 'Sin descripción') + '</p>' +
+                    '<div class="flex justify-between items-center pt-1 border-t border-slate-800 text-[10px] text-slate-500">' +
+                        '<span>Ref: ' + (rep.direccion_referencia || 'N/D') + '</span>' +
+                        botonEliminar +
+                    '</div>';
+                container.appendChild(card);
+            });
+        }
+
+        async function eliminarReporte(idIncidente) {
+            if (!confirm('¿Deseas eliminar este reporte atendido de tu historial?')) return;
+
+            const { error } = await supabaseClient
+                .from('incidentes')
+                .delete()
+                .eq('id', idIncidente);
+
+            if (error) {
+                alert('Error al eliminar: ' + error.message);
+                return;
+            }
+
+            cargarMisReportes();
+        }
+
+        async function enviarIncidencia(e) {
+            e.preventDefault();
+
+            const nuevaIncidencia = {
+                titulo: document.getElementById('titulo').value,
+                descripcion: document.getElementById('descripcion').value,
+                latitud: parseFloat(document.getElementById('latitud').value),
+                longitud: parseFloat(document.getElementById('longitud').value),
+                nivel_gravedad: 8,
+                vulnerabilidad_poblacion: 7,
+                riesgo_infraestructura: 6,
+                reportado_por: usuarioActual.nombre,
+                telefono_contacto: usuarioActual.telefono,
+                correo_contacto: usuarioActual.correo,
+                direccion_referencia: document.getElementById('direccion_referencia').value,
+                estado: 'pendiente'
+            };
+
+            const { error } = await supabaseClient
+                .from('incidentes')
+                .insert([nuevaIncidencia]);
+
+            if (error) {
+                alert('Error al enviar alerta: ' + error.message);
+                return;
+            }
+
+            alert('¡Alerta enviada con éxito! El Centro de Control la ha recibido en tiempo real.');
+            document.getElementById('form-reporte-usuario').reset();
+            cargarMisReportes();
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem('quickhelp_usuario');
+            window.location.href = 'login.html';
+        }
+
+        cargarMisReportes();
+
+        supabaseClient
+          .channel('usuario-cambios-estado')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'incidentes' },
+            () => {
+                cargarMisReportes();
+            }
+          )
+          .subscribe();
+    </script>
+</body>
+</html>
