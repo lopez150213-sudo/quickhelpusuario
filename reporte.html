@@ -25,6 +25,17 @@
         </div>
 
         <form id="form-reporte-usuario" onsubmit="enviarIncidencia(event)" class="space-y-3 text-xs">
+            <div class="form-group">
+                <label for="fotoEvidencia" class="block font-semibold text-slate-300 mb-1">Tomar foto de evidencia:</label>
+                <input 
+                    type="file" 
+                    id="fotoEvidencia" 
+                    accept="image/*" 
+                    capture="environment" 
+                    required
+                    class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-red-600 file:text-white hover:file:bg-red-700"
+                >
+            </div>
             <div>
                 <label class="block font-semibold text-slate-300 mb-1">Título de la Emergencia</label>
                 <input type="text" id="titulo" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-red-500" placeholder="Ej. Hombre cayó en un arroyo">
@@ -77,7 +88,7 @@
         const usuarioActual = JSON.parse(localStorage.getItem('quickhelp_usuario'));
 
         if (!usuarioActual) {
-            window.location.href = 'login.html';
+            window.location.href = 'index.html';
         } else {
             document.getElementById('user-info').textContent = 'Hola, ' + usuarioActual.nombre;
             document.getElementById('direccion_referencia').value = usuarioActual.direccion || '';
@@ -135,6 +146,9 @@
                     botonEliminar = '<button onclick="eliminarReporte(\'' + rep.id + '\')" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded text-[10px] font-semibold transition">Eliminar del historial</button>';
                 }
 
+                // Miniatura en el historial del usuario
+                let fotoHistorial = rep.foto_url ? `<img src="${rep.foto_url}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; margin-top: 4px;">` : '';
+
                 const card = document.createElement('div');
                 card.className = "bg-slate-900 border border-slate-700 p-2.5 rounded-xl space-y-2";
                 card.innerHTML = 
@@ -143,6 +157,7 @@
                         badgeEstado +
                     '</div>' +
                     '<p class="text-[11px] text-slate-400">' + (rep.descripcion || 'Sin descripción') + '</p>' +
+                    fotoHistorial +
                     '<div class="flex justify-between items-center pt-1 border-t border-slate-800 text-[10px] text-slate-500">' +
                         '<span>Ref: ' + (rep.direccion_referencia || 'N/D') + '</span>' +
                         botonEliminar +
@@ -167,8 +182,34 @@
             cargarMisReportes();
         }
 
+        // FUNCIÓN DE ENVÍO ACTUALIZADA CON SUBIDA DE FOTO A SUPABASE STORAGE
         async function enviarIncidencia(e) {
             e.preventDefault();
+
+            const inputFoto = document.getElementById('fotoEvidencia');
+            const archivo = inputFoto.files[0];
+            let fotoUrl = null;
+
+            if (archivo) {
+                const nombreArchivo = `evidencia_${Date.now()}_${archivo.name}`;
+
+                // Sube la foto al bucket público 'evidencia'
+                const { data: storageData, error: storageError } = await supabaseClient.storage
+                    .from('evidencia')
+                    .upload(nombreArchivo, archivo);
+
+                if (storageError) {
+                    alert('Error al subir la evidencia fotográfica: ' + storageError.message);
+                    return;
+                }
+
+                // Obtiene la URL pública de la foto
+                const { data: urlData } = supabaseClient.storage
+                    .from('evidencia')
+                    .getPublicUrl(nombreArchivo);
+
+                fotoUrl = urlData.publicUrl;
+            }
 
             const nuevaIncidencia = {
                 titulo: document.getElementById('titulo').value,
@@ -182,6 +223,7 @@
                 telefono_contacto: usuarioActual.telefono,
                 correo_contacto: usuarioActual.correo,
                 direccion_referencia: document.getElementById('direccion_referencia').value,
+                foto_url: fotoUrl, // <--- Aquí se guarda el enlace de la foto en la base de datos
                 estado: 'pendiente'
             };
 
@@ -194,14 +236,14 @@
                 return;
             }
 
-            alert('¡Alerta enviada con éxito! El Centro de Control la ha recibido en tiempo real.');
+            alert('¡Alerta enviada con éxito y evidencia guardada!');
             document.getElementById('form-reporte-usuario').reset();
             cargarMisReportes();
         }
 
         function cerrarSesion() {
             localStorage.removeItem('quickhelp_usuario');
-            window.location.href = 'login.html';
+            window.location.href = 'index.html';
         }
 
         cargarMisReportes();
