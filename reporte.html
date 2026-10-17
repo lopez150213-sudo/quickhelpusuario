@@ -182,69 +182,137 @@
             cargarMisReportes();
         }
 
-        // FUNCIÓN DE ENVÍO ACTUALIZADA CON SUBIDA DE FOTO A SUPABASE STORAGE
-        async function enviarIncidencia(e) {
-            e.preventDefault();
+     // Función para calcular distancia en metros entre dos coordenadas (Fórmula de Haversine)
+function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Radio de la Tierra en metros
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
 
-            const inputFoto = document.getElementById('fotoEvidencia');
-            const archivo = inputFoto.files[0];
-            let fotoUrl = null;
+// Validación inteligente bidireccional para detectar duplicados sin importar el orden o tildes
+function sonTitulosSimilares(titulo1, titulo2) {
+    const normalizar = (texto) => {
+        return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    };
 
-            if (archivo) {
-                const nombreArchivo = `evidencia_${Date.now()}_${archivo.name}`;
+    const t1 = normalizar(titulo1);
+    const t2 = normalizar(titulo2);
 
-                // Sube la foto al bucket público 'evidencia'
-                const { data: storageData, error: storageError } = await supabaseClient.storage
-                    .from('evidencia')
-                    .upload(nombreArchivo, archivo);
+    if (t1 === t2 || t1.includes(t2) || t2.includes(t1)) {
+        return true;
+    }
 
-                if (storageError) {
-                    alert('Error al subir la evidencia fotográfica: ' + storageError.message);
-                    return;
-                }
+    const palabras1 = t1.split(' ').filter(p => p.length > 3);
+    const palabras2 = t2.split(' ').filter(p => p.length > 3);
 
-                // Obtiene la URL pública de la foto
-                const { data: urlData } = supabaseClient.storage
-                    .from('evidencia')
-                    .getPublicUrl(nombreArchivo);
+    return palabras1.some(palabra => palabras2.includes(palabra));
+}
 
-                fotoUrl = urlData.publicUrl;
-            }
+// FUNCIÓN DE ENVÍO ACTUALIZADA CON VALIDACIÓN DE DUPLICADOS Y SUBIDA DE FOTO
+async function enviarIncidencia(e) {
+    e.preventDefault();
 
-            const nuevaIncidencia = {
-                titulo: document.getElementById('titulo').value,
-                descripcion: document.getElementById('descripcion').value,
-                latitud: parseFloat(document.getElementById('latitud').value),
-                longitud: parseFloat(document.getElementById('longitud').value),
-                nivel_gravedad: 8,
-                vulnerabilidad_poblacion: 7,
-                riesgo_infraestructura: 6,
-                reportado_por: usuarioActual.nombre,
-                telefono_contacto: usuarioActual.telefono,
-                correo_contacto: usuarioActual.correo,
-                direccion_referencia: document.getElementById('direccion_referencia').value,
-                foto_url: fotoUrl, // <--- Aquí se guarda el enlace de la foto en la base de datos
-                estado: 'pendiente'
-            };
+    const inputFoto = document.getElementById('fotoEvidencia');
+    const archivo = inputFoto.files[0];
+    let fotoUrl = null;
 
-            const { error } = await supabaseClient
+    if (archivo) {
+        const nombreArchivo = `evidencia_${Date.now()}_${archivo.name}`;
+
+        // Sube la foto al bucket público 'evidencia'
+        const { data: storageData, error: storageError } = await supabaseClient.storage
+            .from('evidencia')
+            .upload(nombreArchivo, archivo);
+
+        if (storageError) {
+            alert('Error al subir la evidencia fotográfica: ' + storageError.message);
+            return;
+        }
+
+        // Obtiene la URL pública de la foto
+        const { data: urlData } = supabaseClient.storage
+            .from('evidencia')
+            .getPublicUrl(nombreArchivo);
+
+        fotoUrl = urlData.publicUrl;
+    }
+
+    const nuevaIncidencia = {
+        titulo: document.getElementById('titulo').value,
+        descripcion: document.getElementById('descripcion').value,
+        latitud: parseFloat(document.getElementById('latitud').value),
+        longitud: parseFloat(document.getElementById('longitud').value),
+        nivel_gravedad: 8,
+        vulnerabilidad_poblacion: 7,
+        riesgo_infraestructura: 6,
+        reportado_por: usuarioActual.nombre,
+        telefono_contacto: usuarioActual.telefono,
+        correo_contacto: usuarioActual.correo,
+        direccion_referencia: document.getElementById('direccion_referencia').value,
+        foto_url: fotoUrl,
+        estado: 'pendiente'
+    };
+
+    // 1. Consultar incidentes pendientes actuales en Supabase para validar duplicados
+    const { data: existentes, error: errorConsulta } = await supabaseClient
+        .from('incidentes')
+        .select('*')
+        .eq('estado', 'pendiente');
+
+    if (!errorConsulta && existentes && existentes.length > 0) {
+        // 2. Buscar si hay un incidente cercano (radio menor o igual a 100m) y de la misma naturaleza
+        const duplicadoCercano = existentes.find(inc => {
+            const distancia = calcularDistanciaMetros(
+                nuevaIncidencia.latitud, nuevaIncidencia.longitud, 
+                inc.latitud, inc.longitud
+            );
+            
+            const esMismaNaturaleza = sonTitulosSimilares(nuevaIncidencia.titulo, inc.titulo);
+            return distancia <= 100 && esMismaNaturaleza;
+        });
+
+        if (duplicadoCercano) {
+            // ¡Es un duplicado! Actualizamos el reporte existente sumando al nuevo reportante
+            const reportesActualizados = `${duplicadoCercano.reportado_por} + ${nuevaIncidencia.reportado_por}`;
+            
+            const { error: errorUpdate } = await supabaseClient
                 .from('incidentes')
-                .insert([nuevaIncidencia]);
+                .update({ 
+                    reportado_por: reportesActualizados
+                })
+                .eq('id', duplicadoCercano.id);
 
-            if (error) {
-                alert('Error al enviar alerta: ' + error.message);
+            if (errorUpdate) {
+                alert('Error al actualizar el reporte duplicado.');
                 return;
             }
 
-            alert('¡Alerta enviada con éxito y evidencia guardada!');
+            alert('⚠️ Este incidente ya había sido reportado en esta zona. Tu reporte se ha sumado a la alerta activa.');
             document.getElementById('form-reporte-usuario').reset();
             cargarMisReportes();
+            return;
         }
+    }
 
-        function cerrarSesion() {
-            localStorage.removeItem('quickhelp_usuario');
-            window.location.href = 'index.html';
-        }
+    // 3. Si no hay duplicados cercanos, se inserta como una incidencia nueva
+    const { error } = await supabaseClient
+        .from('incidentes')
+        .insert([nuevaIncidencia]);
+
+    if (error) {
+        alert('Error al enviar alerta: ' + error.message);
+        return;
+    }
+
+    alert('¡Alerta enviada con éxito y evidencia guardada!');
+    document.getElementById('form-reporte-usuario').reset();
+    cargarMisReportes();
+}
 
         cargarMisReportes();
 
